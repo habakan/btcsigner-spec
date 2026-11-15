@@ -4,6 +4,7 @@ import { WALLETS } from "./model.mjs";
 
 await compare({
   name: "SeedSigner",
+  formats: true,
   command: process.env.SPEC_PYTHON ?? `${root}build/venv-seedsigner/bin/python`,
   args: [`${root}adapters/seedsigner.py`, process.env.SEEDSIGNER_SRC ?? `${root}third_party/seedsigner/src`],
   configs: [

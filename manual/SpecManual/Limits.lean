@@ -73,7 +73,7 @@ not reach the adapters or the signers, and the inputs the model is given rest on
 two independent routes from the same vector to the model, and on every unmutated vector they give the same
 verdict.
 
-Signers' addresses are compared with the notation. How they write amounts is not yet.
+Signers' addresses are compared with the notation. Their amounts are read back to the value they stand for; that they are written one to one is tested, not proved.
 
 [b173-bech32]: https://github.com/bitcoin/bips/blob/ada341963ab3916e74c98e6de4ba48babc024a75/bip-0173.mediawiki#bech32
 [b350-bech32m]: https://github.com/bitcoin/bips/blob/ada341963ab3916e74c98e6de4ba48babc024a75/bip-0350.mediawiki#bech32m

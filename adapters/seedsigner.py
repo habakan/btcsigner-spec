@@ -18,6 +18,50 @@ from seedsigner.models.psbt_parser import PSBTParser  # noqa: E402
 from seedsigner.models.seed import Seed  # noqa: E402
 from seedsigner.models.settings import SettingsConstants  # noqa: E402
 
+# The math screen (gui/screens/psbt_screens.py PSBTMathScreen) writes its amounts before it draws: its own
+# __post_init__ runs with the display's modules stubbed, as tests/base.py stubs them, and stops at the first draw
+from unittest.mock import MagicMock  # noqa: E402
+for name in ["PIL", "RPi", "RPi.GPIO", "qrcode", "qrcode.image", "qrcode.image.styledpil", "qrcode.image.styles",
+             "qrcode.image.styles.moduledrawers", "seedsigner.gui.renderer", "seedsigner.hardware.buttons"]:
+    sys.modules.setdefault(name, MagicMock())
+import contextlib  # noqa: E402
+with contextlib.redirect_stdout(sys.stderr):  # it prints the locale it sets, and stdout carries the verdicts
+    from seedsigner.gui.screens import psbt_screens
+    from seedsigner.gui.screens.screen import ButtonListScreen
+
+
+class Drawn(Exception):
+    pass
+
+
+def first_draw(*_):
+    raise Drawn
+
+
+ButtonListScreen.__post_init__ = lambda self: None
+psbt_screens.Image.new = first_draw
+
+
+def math_screen(input_amount, spend, fee, change, recipients):
+    """Each amount as the math screen writes it, with the denomination it names for the column"""
+    s = psbt_screens.PSBTMathScreen.__new__(psbt_screens.PSBTMathScreen)
+    s.input_amount, s.num_inputs, s.spend_amount, s.fee_amount, s.change_amount, s.num_recipients = \
+        input_amount, 1, spend, fee, change, recipients
+    s.canvas_width, s.buttons, s.top_nav = 240, [MagicMock()], MagicMock()
+    try:
+        s.__post_init__()
+    except Drawn as e:
+        tb = e.__traceback__
+        while tb.tb_frame.f_locals.get("self") is not s:
+            tb = tb.tb_next
+        unit = tb.tb_frame.f_locals["denomination"]
+    # Past 1M sats the column is btc but the fee stays in sats, written with no unit
+    fee_unit = "" if unit == "btc" else " " + unit
+    rows = [(input_amount, s.input_amount, " " + unit)] + ([(spend, s.spend_amount, " " + unit)] if recipients else []) + \
+        [(fee, s.fee_amount, fee_unit), (change, s.change_amount, " " + unit)]
+    return [{"sats": str(v), "text": t.strip() + u} for v, t, u in rows]
+
+
 NETWORK = SettingsConstants.MAINNET
 seed = Seed(("abandon " * 11 + "about").split())
 FP = seed.get_fingerprint(NETWORK)
@@ -65,8 +109,20 @@ def review(req):
     spend = parser.spend_amount + getattr(parser, "op_return_amount", 0)
     return {"ok": {"input": str(parser.input_amount), "spend": str(spend),
                    "change": str(parser.change_amount), "fee": str(parser.fee_amount), "outputs": change,
-                   "addresses": [{"index": i, "address": a} for i, a in sorted(shown.items())]}}
+                   "addresses": [{"index": i, "address": a} for i, a in sorted(shown.items())],
+                   "amounts": math_screen(parser.input_amount, spend, parser.fee_amount, parser.change_amount,
+                                          parser.num_destinations)}}
+
+
+def format_edges(req):
+    """Each edge value as the input total, and beside a 2 BTC input as the fee, the spend and the change"""
+    amounts = []
+    for v in map(int, req["format"]):
+        amounts += math_screen(v, 0, 0, 0, 0)[:1]
+        amounts += math_screen(200000000, v, v, v, 1)[1:]
+    return {"amounts": amounts}
 
 
 for line in sys.stdin:
-    print(json.dumps(review(json.loads(line))), flush=True)
+    req = json.loads(line)
+    print(json.dumps(format_edges(req) if "format" in req else review(req)), flush=True)

@@ -118,6 +118,12 @@ what it lets the user approve:
   that shows the previous transaction's amounts instead keeps this and the totals above with those)
 - an address shown for an output is the one `Notation.lean` writes for its script on that network (a
   script with no address may be shown in the signer's own way)
+- an amount the screen shows, read back in the unit and decimal point the screen writes, is the amount it
+  stands for, and no two amounts up to 21M BTC are written the same (one written with no unit is counted as
+  a policy difference). Krux, Coldcard, SeedSigner and Specter
+  DIY write them with their own code, on every case and on edge values (every unit Coldcard offers, a
+  decimal comma for Krux). Specter writes them under MicroPython on the device, and this runs its
+  expression under CPython, whose float printing differs
 
 A PSBT with a key twice in a map is invalid (BIP174) and the model refuses it; one mutation repeats a key
 with another value, first or last, and a signer that accepts it is counted with which value its screen took.
@@ -153,7 +159,8 @@ down anywhere public.
   comparison checks.
 - **SeedSigner** calls change any output our seed makes at the path the PSBT gives, showing that path
   rather than refusing an unusual one; fills in a missing fingerprint; refuses inputs of mixed script
-  types; shows a negative fee for a transaction that cannot be mined;
+  types; shows a negative fee for a transaction that cannot be mined; past 1M sats writes the totals in
+  btc and the fee in sats with no unit beside them;
   and its review passes a sighash other than ALL, which embit's `sign_with` then declines to sign.
 - **Krux** holds one script type per wallet and refuses a PSBT of another; warns rather than refuses on
   a path mismatch, an unset fingerprint and high fees; and
@@ -194,7 +201,7 @@ script hashing and SHA-256 are assumptions (`Env.owns`, equality of `Tx` standin
 not things proved here. What a signature commits to, and that a txid binds its transaction (`Bound`), are
 derived from the digests and the serialization, taking SHA-256 to be one to one; that a signature
 verifies only over its digest (ECDSA, Schnorr) is assumed. Address checksums are parameters of the notation; its proofs hold whatever they are, and the vectors check the
-rest. Signers' addresses are compared with it; how they write amounts is not yet.
+rest. Signers' addresses are compared with it, and their amounts are read back to the value they stand for.
 
 ## License
 

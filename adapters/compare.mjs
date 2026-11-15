@@ -7,7 +7,9 @@
 // it shows as ours, {index, verified}: true, false (it stops), "unverified" (the user may skip checking) or
 // "unsupported" (it stops); `change` is their total and `spend` the rest. A warning the user has to get past
 // goes in `warnings`; "unverified input amounts" is the one the invariants know. A worker may add
-// `addresses`, [{index, address}], the text its screen shows for those outputs.
+// `addresses`, [{index, address}], the text its screen shows for those outputs, and `amounts`, [{sats, text,
+// point?}], each amount its screen shows with the unit as written ("." as the decimal point unless `point` says).
+// A worker that writes amounts also answers {format: [sats...], config} with {amounts}, for the edge values.
 import { readFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -27,6 +29,10 @@ function startWorker(command, args) {
       const line = (await lines.next()).value;
       if (line === undefined) throw new Error(`${command} exited`);
       return JSON.parse(line);
+    },
+    async format(sats, config) {
+      proc.stdin.write(JSON.stringify({ format: sats.map(String), config }) + "\n");
+      return JSON.parse((await lines.next()).value);
     },
     stop() { proc.stdin.end(); },
   };
@@ -154,6 +160,45 @@ export function mutators(R) {
 }
 
 // --- what each side decided
+// --- an amount as the screen writes it, read back as a user would
+const UNITS = [[/\bsat(s|oshis?)?\b/i, 0], [/\bbits\b/i, 2], [/\bm(BTC|XTN)\b/, 5], [/₿|\b(t?BTC|XTN)\b/i, 8]];
+/** The sats `text` says with `point` as its decimal point, or null when it is not one amount in one unit */
+export function readAmount(text, point = ".") {
+  const units = UNITS.filter(([re]) => re.test(text));
+  if (units.length !== 1) return null;
+  const [re, d] = units[0];
+  const num = text.replace(re, "").replace(/\s/g, "").split(point === "." ? "," : ".").join("");
+  const [int, frac = "", ...more] = num.replace(/^-/, "").split(point);
+  if (more.length || !/^\d+$/.test(int) || !/^\d*$/.test(frac) || frac.length > d) return null;
+  const v = BigInt(int) * 10n ** BigInt(d) + BigInt(frac.padEnd(d, "0") || "0");
+  return num.startsWith("-") ? -v : v;
+}
+/** The values where a notation most often slips: digit and unit boundaries, 10^15 (past it a double has under
+ * one sat of precision at eight decimals), MAX_MONEY, and random ones up to it */
+function edgeAmounts(R) {
+  const fixed = [0n, 1n, 9n, 10n, 99n, 100n, 999n, 1000n, 99999n, 100000n, 999999n, 1000000n, 1000001n, 10000000n,
+    99999999n, 100000000n, 100000001n, 123456789n, 2100000000n, 10n ** 15n, 10n ** 15n + 1n, MAX_MONEY - 1n, MAX_MONEY];
+  const random = Array.from({ length: 2000 }, () => BigInt(Math.floor(R() * Number(MAX_MONEY / 1000n))) * 1000n + BigInt(Math.floor(R() * 1000)));
+  return [...fixed, ...random];
+}
+/** [violation, example] for each amount whose text reads back to another value or that another value shares, and
+ * [policy, example] for one written with no unit, which the screen around it explains or not. Past 21M BTC the
+ * transaction cannot be valid, so how such an amount is written is not checked */
+function amountViolations(amounts, seen, policy = []) {
+  const out = [];
+  for (const { sats, text, point = "." } of amounts) {
+    const n = BigInt(sats);
+    if (n > MAX_MONEY || n < -MAX_MONEY) continue;
+    const v = readAmount(text, point), key = `${point}${text.trim()}`;
+    if (/^-?[\d.,\s]+$/.test(text)) { policy.push(["writes an amount with no unit beside amounts in a unit", `${JSON.stringify(text)} for ${sats}`]); continue; }
+    if (v === null) out.push(["an amount is written as text that does not read as one amount", `${JSON.stringify(text)} for ${sats}`]);
+    else if (v !== BigInt(sats)) out.push(["an amount is written as text that reads as another", `${JSON.stringify(text)} for ${sats} reads ${v}`]);
+    if (seen.has(key) && seen.get(key) !== sats) out.push(["two amounts are written the same", `${JSON.stringify(text)} for ${seen.get(key)} and ${sats}`]);
+    seen.set(key, sats);
+  }
+  return out;
+}
+
 const sum = (xs) => xs.reduce((a, b) => a + b, 0n);
 const isP2wsh = (spk) => spk.length === 34 && spk[0] === 0 && spk[1] === 32;
 
@@ -260,7 +305,7 @@ export async function compare(signer) {
 
   let violations = 0;
   for (const cfg of signer.configs) {
-    const outcomes = {}, reasons = {}, examples = {}, broken = {};
+    const outcomes = {}, reasons = {}, examples = {}, broken = {}, seen = new Map();
     const note = (table, k, ex) => { table[k] = (table[k] ?? 0) + 1; if (ex && !examples[k]) examples[k] = ex; };
     let count = 0;
     for (const { name, p } of cases(vectors, muts, R, perVector)) {
@@ -289,6 +334,9 @@ export async function compare(signer) {
       }
 
       for (const v of invariants(pp, view, s.ok, cfg).filter((v) => !either || either.includes(v))) { note(broken, v, name); violations++; }
+      const policy = [];
+      for (const [v, ex] of amountViolations(s.ok.amounts ?? [], seen, policy)) { note(broken, v, `${name}: ${ex}`); violations++; }
+      for (const [v, ex] of policy) note(reasons, v, `${name}: ${ex}`);
       for (const { index, address } of s.ok.addresses ?? []) {
         const ref = await model.render(signer.network ?? "main", view.outputs[index].spk);
         if (ref.startsWith("script:")) note(reasons, "shows a script with no address in its own way", name);
@@ -309,6 +357,13 @@ export async function compare(signer) {
         else if (!sOurs && mOurs) note(reasons, `${S} external, model ours`, name);
       });
       if (BigInt(s.ok.fee) !== BigInt(m.ok.fee)) note(reasons, "fee differs from the model's", name);
+    }
+    if (signer.formats) {
+      const f = await worker.format(edgeAmounts(rng(1)), cfg.request);  // its own draws, so the cases stay as they were
+      const policy = [];
+      for (const [v, ex] of amountViolations(f.amounts, new Map(), policy)) { note(broken, v, `edge values: ${ex}`); violations++; }
+      for (const [v, ex] of policy) note(reasons, v, `edge values: ${ex}`);
+      count += f.amounts.length;
     }
     console.log(`\n== ${S}, ${cfg.name}: ${count} cases`);
     const show = (title, table) => {

@@ -6,6 +6,7 @@ import { WALLETS } from "./model.mjs";
 const multisig = (name, wallet) => ({ name, wallet, request: { descriptor: wallet.descriptor } });
 await compare({
   name: "Coldcard",
+  formats: true,
   command: process.env.SPEC_COLDCARD_PYTHON ?? `${root}build/venv-coldcard/bin/python`,
   args: [`${root}adapters/coldcard.py`, process.env.COLDCARD_SRC ?? `${root}third_party/coldcard`],
   configs: [

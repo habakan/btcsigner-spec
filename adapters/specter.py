@@ -102,8 +102,25 @@ def review(req):
         addresses.append({"index": i, "address": out["address"]})
     inputs = sum(inp["value"] for inp in meta["inputs"])
     return {"ok": {"input": str(inputs), "spend": str(spend), "change": str(change), "fee": str(meta["fee"]),
-                   "outputs": ours, "warnings": warnings, "addresses": addresses}}
+                   "outputs": ours, "warnings": warnings, "addresses": addresses,
+                   "amounts": written(meta)}}
+
+
+def written(meta, unit="BTC"):
+    """Each amount as gui/screens/transaction.py writes it: inputs and outputs with "%.8f" of value/1e8, the fee
+    in satoshi. Specter runs it under MicroPython 1.12, whose float printing is not CPython's (README.md)"""
+    out = [{"sats": str(x["value"]), "text": "%.8f %s" % (x["value"] / 1e8, unit)} for x in meta["inputs"] + meta["outputs"]]
+    if meta.get("fee"):
+        out.append({"sats": str(meta["fee"]), "text": "%d satoshi" % meta["fee"]})
+    return out
+
+
+def format_edges(req):
+    values = [int(v) for v in req["format"]]
+    return {"amounts": written({"inputs": [{"value": v} for v in values], "outputs": [], "fee": None}) +
+            [{"sats": str(v), "text": "%d satoshi" % v} for v in values if v]}
 
 
 for line in sys.stdin:
-    print(json.dumps(review(json.loads(line))), flush=True)
+    req = json.loads(line)
+    print(json.dumps(format_edges(req) if "format" in req else review(req)), flush=True)

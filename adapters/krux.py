@@ -38,6 +38,21 @@ from krux.key import Key, TYPE_SINGLESIG, TYPE_MULTISIG  # noqa: E402
 from krux.psbt import PSBTSigner, get_policy, CHANGE, SELF_TRANSFER  # noqa: E402
 from krux.qr import FORMAT_NONE  # noqa: E402
 from krux.wallet import Wallet  # noqa: E402
+from krux import format as kformat  # noqa: E402
+from krux.krux_settings import Settings  # noqa: E402
+
+# Every amount outputs() writes goes through format_btc after "₿" and a thin space (psbt.py _btc_render)
+shown = []
+_format_btc = kformat.format_btc
+
+
+def recording_format_btc(amount):
+    text = _format_btc(amount)
+    shown.append({"sats": str(amount), "text": "\u20bf\u2009" + text, "point": kformat.render_decimal_separator()})
+    return text
+
+
+kformat.format_btc = recording_format_btc
 
 MNEMONIC = "abandon " * 11 + "about"
 wallets = {}
@@ -70,7 +85,9 @@ def review(req):
             warnings.append("path mismatch")
         if wallet.key.fingerprint != b"\x00\x00\x00\x00" and signer.fill_zero_fingerprint():
             warnings.append("fingerprint unset in PSBT")
+        shown.clear()
         _, fee_percent = signer.outputs()
+        amounts = list(shown)
         if signer.unverified_input_amounts():
             warnings.append("unverified input amounts")
         if fee_percent >= 10.0:
@@ -104,8 +121,21 @@ def review(req):
         except Exception:
             pass
     return {"ok": {"input": str(inputs), "spend": str(spend), "change": str(change),
-                   "fee": str(inputs - spend - change), "outputs": ours, "warnings": warnings, "addresses": addresses}}
+                   "fee": str(inputs - spend - change), "outputs": ours, "warnings": warnings, "addresses": addresses,
+                   "amounts": amounts}}
+
+
+def format_edges(req):
+    """The edge values in the default locale and in one that writes a decimal comma"""
+    shown.clear()
+    for locale in ("en-US", "fr-FR"):
+        Settings().i18n.locale = locale
+        for sats in req["format"]:
+            kformat.format_btc(int(sats))
+    Settings().i18n.locale = "en-US"
+    return {"amounts": list(shown)}
 
 
 for line in sys.stdin:
-    print(json.dumps(review(json.loads(line))), flush=True)
+    req = json.loads(line)
+    print(json.dumps(format_edges(req) if "format" in req else review(req)), flush=True)

@@ -5,6 +5,7 @@ import { WALLETS } from "./model.mjs";
 const single = (script) => ({ name: `single-sig ${script}`, wallet: null, request: { script, descriptor: null } });
 await compare({
   name: "Specter DIY",
+  formats: true,
   command: process.env.SPEC_SPECTER_PYTHON ?? `${root}build/venv-specter/bin/python`,
   args: [`${root}adapters/specter.py`, process.env.SPECTER_SRC ?? `${root}third_party/specter-diy`],
   configs: [

@@ -124,8 +124,38 @@ def review(req):
                    "addresses": [{"index": i, "address": a.lstrip("\x02")} for i, ch, a in outs]}}
 
 
+# render_value under each unit setting (rz), padded and not; a loop, as EXEC's comprehensions see no module names
+FORMAT = """
+import chains, ujson
+from glob import settings
+settings.set('rz', %d)
+out = []
+for v in %s:
+    out.append(chains.BitcoinMain.render_value(v, %s))
+RV.write(ujson.dumps(out))
+settings.set('rz', 0)
+"""
+
+
+def format_edges(req):
+    global current
+    if current is None:
+        start(req["config"])
+        current = json.dumps(req["config"], sort_keys=True)
+    values = [int(v) for v in req["format"]]
+    amounts = []
+    for rz in (8, 5, 2, 0):
+        for unpad in (False, True):
+            for k in range(0, len(values), 40):  # a USB message carries about 2KB each way
+                chunk = values[k:k + 40]
+                for v, (txt, unit) in zip(chunk, json.loads(run(FORMAT % (rz, chunk, unpad)))):
+                    amounts.append({"sats": str(v), "text": "%s %s" % (txt, unit)})
+    return {"amounts": amounts}
+
+
 try:
     for line in sys.stdin:
-        print(json.dumps(review(json.loads(line))), flush=True)
+        req = json.loads(line)
+        print(json.dumps(format_edges(req) if "format" in req else review(req)), flush=True)
 finally:
     stop()

@@ -5,6 +5,7 @@ import { WALLETS } from "./model.mjs";
 const single = (script) => ({ name: `single-sig ${script}`, wallet: null, request: { script, descriptor: null } });
 await compare({
   name: "Krux",
+  formats: true,
   command: process.env.SPEC_KRUX_PYTHON ?? `${root}build/venv-krux/bin/python`,
   args: [`${root}adapters/krux.py`, process.env.KRUX_SRC ?? `${root}third_party/krux`],
   configs: [
