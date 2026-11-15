@@ -138,7 +138,8 @@ skipping the sighash check, an index bound off by one, P2WSH change without a P2
 no wallet check, and change that ignores the network.
 
 `make vectors` writes the same cases to `build/vectors.json`, for a signer to test against in its own suite
-without Lean or Node. Each case has the PSBT, the wallet the signer holds, the model's verdict, and what any
+without Lean or Node. CI publishes the file for each commit on main at
+[habakan.github.io/btcsigner-spec/vectors.json](https://habakan.github.io/btcsigner-spec/vectors.json), with its SHA-256 beside it. Each case has the PSBT, the wallet the signer holds, the model's verdict, and what any
 signer that lets the user approve it has to show: the input total (the PSBT's amounts, or the previous
 transactions' where they differ), the fee for each, whether it has to warn about unverified input amounts,
 and which outputs it may not call verified change. The model's verdict is its policy, not a requirement.

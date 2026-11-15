@@ -19,7 +19,7 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - run: make check
 
-  manual:
+  pages:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,13 +33,21 @@ jobs:
           path: manual/.lake
           key: manual-${{ hashFiles('manual/lake-manifest.json', 'manual/lean-toolchain') }}
       - run: make docs
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Served beside the manual so a signer's suite can fetch the cases from a stable URL
+      - run: |
+          make vectors
+          cp build/vectors.json manual/_out/html-multi/vectors.json
+          cd manual/_out/html-multi && sha256sum vectors.json > vectors.json.sha256
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: manual/_out/html-multi
 
   deploy:
     if: github.ref == 'refs/heads/main'
-    needs: [check, manual]
+    needs: [check, pages]
     runs-on: ubuntu-latest
     permissions:
       pages: write

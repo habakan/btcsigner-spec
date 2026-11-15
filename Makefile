@@ -45,12 +45,17 @@ $(MODEL): Main.lean $(wildcard SignerSpec/*.lean)
 	lake build signer-spec
 
 clone = test -d $(1) || git clone --filter=blob:none $(2) $(1); cd $(1) && git checkout -q --detach $(3)
-deps:
-	mkdir -p third_party build
+# The PSBTs every case starts from, from bitwasm-signer's committed files and Core's rpc_psbt.json (Python only)
+seeds:
+	mkdir -p third_party
 	$(call clone,$(BITWASM),https://github.com/bitwasm-project/bitwasm-signer.git,$(BITWASM_REV))
+	$(MAKE) -C $(BITWASM)/parser build/vectors/own_p2wpkh_1in.psbt
+.PHONY: seeds
+
+deps: seeds
+	mkdir -p build
 	test -d $(BITWASM)/third_party/secp256k1 || $(MAKE) -C $(BITWASM) deps
 	$(MAKE) -C $(BITWASM) all
-	$(MAKE) -C $(BITWASM)/parser build/vectors/own_p2wpkh_1in.psbt
 	$(call clone,$(SEEDSIGNER),https://github.com/SeedSigner/seedsigner.git,$(SEEDSIGNER_REV))
 	uv venv -q -p 3.12 build/venv-seedsigner
 	uv pip install -q -p build/venv-seedsigner/bin/python --require-hashes -r adapters/requirements.txt
@@ -84,7 +89,7 @@ build/coconut-review: adapters/coconut/bin/review.dart adapters/coconut/pubspec.
 	dart compile exe adapters/coconut/bin/review.dart -o $@
 
 # The comparison's cases as one file, for a signer's own tests (README.md)
-build/vectors.json: $(MODEL) adapters/vectors.mjs adapters/compare.mjs
+build/vectors.json: $(MODEL) adapters/vectors.mjs adapters/compare.mjs | seeds
 	mkdir -p build
 	node adapters/vectors.mjs 5 1 > $@
 vectors: build/vectors.json
