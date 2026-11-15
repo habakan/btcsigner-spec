@@ -1,0 +1,11 @@
+[package]
+name = "rust-bitcoin-review"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# rust-bitcoin's handling of a PSBT; versions pinned exactly, with Cargo.lock
+[dependencies]
+bitcoin = { version = "=0.32.102", features = ["base64"] }
+bip39 = "=3.0.0"
+serde_json = "=1.0.154"

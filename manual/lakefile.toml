@@ -1,0 +1,18 @@
+name = "signer-spec-manual"
+defaultTargets = ["manual"]
+
+[[require]]
+name = "verso"
+git = "https://github.com/leanprover/verso.git"
+rev = "v4.35.0"
+
+[[require]]
+name = "signer-spec"
+path = ".."
+
+[[lean_lib]]
+name = "SpecManual"
+
+[[lean_exe]]
+name = "manual"
+root = "Main"

@@ -1,0 +1,9 @@
+name = "signer-spec"
+defaultTargets = ["SignerSpec"]
+
+[[lean_lib]]
+name = "SignerSpec"
+
+[[lean_exe]]
+name = "signer-spec"
+root = "Main"

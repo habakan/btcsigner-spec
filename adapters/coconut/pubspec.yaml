@@ -1,0 +1,7 @@
+name: spec_coconut
+description: Coconut Vault's PSBT review, driven by adapters/coconut.mjs
+publish_to: none
+environment:
+  sdk: ^3.3.4
+dependencies:
+  coconut_lib: 1.1.1
